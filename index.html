@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sustainable Travel Dialogue TTS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font and basic styling */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+            color: #1f2937;
+            padding: 1rem;
+        }
+        .speaker-presenter {
+            color: #10b981; /* Emerald 500 */
+            font-weight: 600;
+        }
+        .speaker-laura {
+            color: #3b82f6; /* Blue 500 */
+            font-weight: 600;
+        }
+        .dialogue-line {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .dialogue-line:last-child {
+            border-bottom: none;
+        }
+        .loading-spinner {
+            border-top-color: #3b82f6;
+            border-right-color: transparent;
+            border-bottom-color: transparent;
+            border-left-color: #3b82f6;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .script-container {
+            transition: all 0.3s ease-in-out;
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            padding: 0 1rem;
+            margin-bottom: 0;
+        }
+        .script-container.visible {
+            max-height: 400px; /* Max height to allow transition */
+            opacity: 1;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-start justify-center">
+
+    <div id="app" class="w-full max-w-3xl bg-white shadow-xl rounded-2xl p-6 md:p-10 mt-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">English Dialogue Text-to-Speech</h1>
+        <p class="text-gray-500 mb-6">Chuyển đổi đoạn hội thoại thành giọng đọc đa giọng nói.</p>
+
+        <!-- Toggle Button -->
+        <button id="toggleScriptButton" 
+                class="mb-4 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-100 rounded-lg hover:bg-indigo-200 transition duration-150">
+            Show Script (Hiển thị Script)
+        </button>
+
+        <!-- Script Container (Initially hidden) -->
+        <div id="scriptContainer" class="script-container bg-gray-50 rounded-xl shadow-inner">
+            <h2 class="text-xl font-semibold mb-2 text-gray-700">Script (Hội thoại)</h2>
+            <div id="script-display" class="max-h-60 overflow-y-auto text-sm">
+                <!-- Dialogue will be injected here -->
+            </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+            <button id="generateButton" 
+                    class="flex-1 px-6 py-3 bg-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:bg-indigo-700 transition duration-150 disabled:bg-indigo-300 disabled:cursor-not-allowed items-center justify-center">
+                <span id="generateText">Generate Audio</span>
+                <div id="loadingIndicator" class="hidden loading-spinner w-5 h-5 border-4 rounded-full ml-3"></div>
+            </button>
+            <button id="playButton" disabled
+                    class="flex-1 px-6 py-3 bg-emerald-500 text-white font-semibold rounded-xl shadow-lg hover:bg-emerald-600 transition duration-150 disabled:bg-gray-300 disabled:cursor-not-allowed">
+                Play Audio
+            </button>
+        </div>
+
+        <div id="messageBox" class="mt-6 p-4 text-sm rounded-lg text-yellow-800 bg-yellow-100 hidden"></div>
+        <audio id="audioPlayer" class="w-full mt-6 rounded-xl hidden" controls></audio>
+    </div>
+
+    <script type="module">
+        // Global variable for API Key (Canvas environment handles this)
+        const apiKey = ""; 
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+        
+        let audioUrl = null;
+        let isGenerating = false;
+        let isScriptVisible = false;
+
+        const generateButton = document.getElementById('generateButton');
+        const playButton = document.getElementById('playButton');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const generateText = document.getElementById('generateText');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const messageBox = document.getElementById('messageBox');
+        const scriptDisplay = document.getElementById('script-display');
+        const scriptContainer = document.getElementById('scriptContainer');
+        const toggleScriptButton = document.getElementById('toggleScriptButton');
+
+
+        // --- Dialogue Script ---
+        const script = [
+            { speaker: "Presenter", text: "Welcome to Travel Talk. Today we have Laura, a travel blogger who focuses on sustainable tourism. Laura, why this specific focus?" },
+            { speaker: "Laura", text: "Hi! Well, I’ve always loved travelling, but I became more and more worried about the huge impact we’re having on the environment—the pollution, the waste, the damage to natural habitats. It wasn't really about saving money, it was about acknowledging that we have a responsibility to look after the planet, so I started looking for ways to travel that were less damaging. That's why I began this new style of travel." },
+            { speaker: "Presenter", text: "I see. And what’s the biggest change you've made? Getting rid of flights?" },
+            { speaker: "Laura", text: "That's the hard one! I haven’t stopped flying completely, especially for very long trips, but I try to use the train whenever possible. I've found that travelling by train, although sometimes slower than the plane, gives you a much better experience. You get to see the whole landscape change, which is something you definitely miss when you're 30,000 feet up in the air. That’s definitely the highlight." },
+            { speaker: "Presenter", text: "And where do you choose to stay?" },
+            { speaker: "Laura", text: "I rarely book big, international hotel chains anymore. I prefer places that are owned and run by local people—small guesthouses or family-run B&Bs. They usually employ local staff and often use local ingredients, which puts money directly into the community." },
+            { speaker: "Presenter", text: "That makes sense. What about waste?" },
+            { speaker: "Laura", text: "Plastic is a huge problem. I always travel with my own reusable water bottle and a coffee cup. I've also learned to avoid buying imported food at supermarkets, which usually comes in a lot of packaging. Sticking to local markets and seasonal produce is much better. Many travellers try exotic food, but forgetting where it comes from is a common mistake." },
+            { speaker: "Presenter", text: "Does planning this kind of trip take longer?" },
+            { speaker: "Laura", text: "Yes, it does. You can't just click 'book' and assume everything is eco-friendly. Sometimes finding the right train connection or a genuinely green hotel takes much more research and time. That can be challenging, but it's worth the effort." },
+            { speaker: "Presenter", text: "Any final advice for our listeners?" },
+            { speaker: "Laura", text: "Don't think you have to change everything overnight. Start small. Bring your own cup, choose a local restaurant, take the bus instead of a taxi once in a while. Those little changes really add up and make a difference over time. And finally, when you buy souvenirs, look for things made by local artisans rather than cheap plastic stuff that comes from big factories. And always choose activities that treat the wildlife and nature with respect." }
+        ];
+
+        // --- Utility Functions for PCM to WAV Conversion (required by the TTS API) ---
+
+        /**
+         * Converts a Base64 string to an ArrayBuffer.
+         */
+        const base64ToArrayBuffer = (base64) => {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        };
+
+        /**
+         * Converts raw PCM audio data (Int16) into a WAV Blob.
+         */
+        const pcmToWav = (pcm16, sampleRate) => {
+            const numChannels = 1;
+            const bytesPerSample = 2; // 16-bit PCM
+            const dataLength = pcm16.length * bytesPerSample;
+
+            const buffer = new ArrayBuffer(44 + dataLength);
+            const view = new DataView(buffer);
+
+            let offset = 0;
+
+            // RIFF chunk
+            view.setUint32(offset, 0x52494646, false); // "RIFF"
+            offset += 4;
+            view.setUint32(offset, 36 + dataLength, true); // ChunkSize
+            offset += 4;
+            view.setUint32(offset, 0x57415645, false); // "WAVE"
+            offset += 4;
+
+            // FMT chunk
+            view.setUint32(offset, 0x666d7420, false); // "fmt "
+            offset += 4;
+            view.setUint32(offset, 16, true); // Subchunk1Size (16 for PCM)
+            offset += 4;
+            view.setUint16(offset, 1, true); // AudioFormat (1 for PCM)
+            offset += 2;
+            view.setUint16(offset, numChannels, true); // NumChannels
+            offset += 2;
+            view.setUint32(offset, sampleRate, true); // SampleRate
+            offset += 4;
+            view.setUint32(offset, sampleRate * numChannels * bytesPerSample, true); // ByteRate
+            offset += 4;
+            view.setUint16(offset, numChannels * bytesPerSample, true); // BlockAlign
+            offset += 2;
+            view.setUint16(offset, 16, true); // BitsPerSample
+            offset += 2;
+
+            // DATA chunk
+            view.setUint32(offset, 0x64617461, false); // "data"
+            offset += 4;
+            view.setUint32(offset, dataLength, true); // Subchunk2Size
+            offset += 4;
+
+            // Write PCM data
+            for (let i = 0; i < pcm16.length; i++) {
+                view.setInt16(offset, pcm16[i], true);
+                offset += 2;
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
+        };
+
+
+        // --- UI Setup and Logic ---
+
+        // Display the script in the UI
+        const renderScript = () => {
+            scriptDisplay.innerHTML = script.map(line => `
+                <div class="dialogue-line">
+                    <span class="speaker-text speaker-${line.speaker.toLowerCase()}">${line.speaker}:</span> ${line.text}
+                </div>
+            `).join('');
+        };
+        
+        // Toggle script visibility
+        const toggleScript = () => {
+            isScriptVisible = !isScriptVisible;
+            scriptContainer.classList.toggle('visible', isScriptVisible);
+            toggleScriptButton.textContent = isScriptVisible ? 'Hide Script (Ẩn Script)' : 'Show Script (Hiển thị Script)';
+        };
+
+        // Show/Hide Messages
+        const showMessage = (text, type = 'warning') => {
+            messageBox.textContent = text;
+            messageBox.className = `mt-6 p-4 text-sm rounded-lg ${type === 'error' ? 'text-red-800 bg-red-100' : type === 'success' ? 'text-green-800 bg-green-100' : 'text-yellow-800 bg-yellow-100'}`;
+            messageBox.style.display = 'block';
+        };
+
+        const hideMessage = () => {
+            messageBox.style.display = 'none';
+        };
+
+        // Update button states
+        const setGeneratingState = (state) => {
+            isGenerating = state;
+            generateButton.disabled = state;
+            playButton.disabled = true;
+            loadingIndicator.classList.toggle('hidden', !state);
+            generateText.textContent = state ? 'Generating...' : 'Generate Audio';
+        };
+
+        /**
+         * Main function to generate audio with exponential backoff for retries.
+         */
+        const generateAudio = async (attempt = 0) => {
+            if (isGenerating && attempt === 0) return;
+
+            // Only set state on the first attempt or if retry is successful
+            if (attempt === 0) {
+                setGeneratingState(true);
+                hideMessage();
+                audioPlayer.classList.add('hidden');
+                audioPlayer.src = '';
+                audioUrl = null;
+            }
+
+            // Prepare text for multi-speaker API call
+            const textForApi = script.map(line => `${line.speaker}: ${line.text}`).join('\n');
+
+            const payload = {
+                contents: [{ parts: [{ text: textForApi }] }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    // Define voices for each speaker tag in the text
+                    speechConfig: {
+                        multiSpeakerVoiceConfig: {
+                            speakerVoiceConfigs: [
+                                { speaker: "Presenter", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Charon" } } }, // Informative voice
+                                { speaker: "Laura", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } }        // Upbeat voice
+                            ]
+                        }
+                    }
+                },
+                model: "gemini-2.5-flash-preview-tts"
+            };
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    // Check if it's a temporary error that warrants a retry (e.g., 5xx, 429)
+                    if (response.status >= 500 || response.status === 429) {
+                        throw new Error(`Temporary API Error: Status ${response.status}`);
+                    }
+                    // For other errors (like 400 Bad Request), treat as fatal
+                    const errorJson = await response.json();
+                    const errorMessage = errorJson.error?.message || `API returned status ${response.status}`;
+                    throw new Error(`Fatal API Error: ${errorMessage}`);
+                }
+                
+                const result = await response.json();
+                
+                const part = result?.candidates?.[0]?.content?.parts?.[0];
+                const audioData = part?.inlineData?.data;
+                const mimeType = part?.inlineData?.mimeType;
+
+                if (!audioData || !mimeType || !mimeType.startsWith("audio/L16")) {
+                    console.error("Invalid API response structure or missing audio data.", result);
+                    showMessage("Lỗi: Không thể nhận được dữ liệu âm thanh hợp lệ từ dịch vụ. Vui lòng thử lại.", 'error');
+                    return;
+                }
+
+                // Extract sample rate from mimeType (e.g., audio/L16;rate=24000)
+                const rateMatch = mimeType.match(/rate=(\d+)/);
+                const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000; 
+
+                // 1. Convert Base64 audio data to ArrayBuffer
+                const pcmData = base64ToArrayBuffer(audioData);
+                // 2. API returns signed PCM16 audio data. Create Int16Array view.
+                const pcm16 = new Int16Array(pcmData);
+                // 3. Convert PCM data to a standard WAV Blob
+                const wavBlob = pcmToWav(pcm16, sampleRate);
+                
+                // 4. Create a playable URL
+                if (audioUrl) {
+                    URL.revokeObjectURL(audioUrl); // Clean up previous URL
+                }
+                audioUrl = URL.createObjectURL(wavBlob);
+                
+                // Update player and button
+                audioPlayer.src = audioUrl;
+                audioPlayer.classList.remove('hidden');
+                playButton.disabled = false;
+                showMessage("Đã tạo âm thanh thành công! Nhấn 'Play Audio' hoặc sử dụng trình phát.", 'success');
+                setGeneratingState(false); // Success, stop loading
+                return; // Exit successful call
+                
+            } catch (error) {
+                console.error(`TTS Generation Error (Attempt ${attempt + 1}):`, error);
+                
+                // Simple exponential backoff retry logic (max 3 retries)
+                if (attempt < 2 && error.message.includes('Temporary API Error')) {
+                    const delay = Math.pow(2, attempt) * 1000;
+                    console.log(`Retrying in ${delay / 1000}s...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return generateAudio(attempt + 1); // Retry
+                }
+
+                // If all retries failed or it was a fatal error
+                showMessage(`Lỗi tạo âm thanh: ${error.message}. Vui lòng kiểm tra kết nối mạng và thử lại.`, 'error');
+                
+            } finally {
+                if (audioUrl === null) {
+                    // Only stop loading if audio wasn't successfully generated in this chain of calls
+                    setGeneratingState(false);
+                }
+            }
+        };
+
+        const playGeneratedAudio = () => {
+            if (audioPlayer.src) {
+                audioPlayer.play();
+                hideMessage(); // Hide any success message upon playing
+            }
+        };
+
+        // --- Initialization and Event Listeners ---
+        window.onload = () => {
+            renderScript();
+        };
+
+        generateButton.addEventListener('click', () => generateAudio(0));
+        playButton.addEventListener('click', playGeneratedAudio);
+        toggleScriptButton.addEventListener('click', toggleScript);
+
+    </script>
+</body>
+</html>
